@@ -20,21 +20,20 @@ var db_config = {
 var connection
 
 function handleDisconnect() {
-  connection = mysql.createConnection(db_config); // Recreate the connection, since
-                                                  // the old one cannot be reused.
-  connection.connect(function(err) {              // The server is either down
-    if(err) {                                     // or restarting (takes a while sometimes).
-      console.log('error when connecting to db:', err);
-      setTimeout(handleDisconnect, 2000) // We introduce a delay before attempting to reconnect,
-    }                                     // to avoid a hot loop, and to allow our node script to
-  });                                     // process asynchronous requests in the meantime.
-                                          // If you're also serving http, display a 503 error.
+  connection = mysql.createConnection(db_config)
+
+  connection.connect(function(err) {
+    if(err) {
+      console.log('error when connecting to db:', err)
+      setTimeout(handleDisconnect, 2000) 
+    }
+  }); 
   connection.on('error', function(err) {
     console.log('db error', err)
-    if(err.code === 'PROTOCOL_CONNECTION_LOST') { // Connection to the MySQL server is usually
-      handleDisconnect();                         // lost due to either server restart, or a
-    } else {                                      // connnection idle timeout (the wait_timeout
-      throw err                                 // server variable configures this)
+    if(err.code === 'PROTOCOL_CONNECTION_LOST') {
+      handleDisconnect();     
+    } else {                    
+      throw err                                 
     }
   });
 }
@@ -43,47 +42,85 @@ handleDisconnect()
 
 var app = express()
 
-// var http = require('http').Server(app)
-
-
-// Create an instance of the http server to handle HTTP requests
-// http.listen(7778, function(){
-//       console.log('listening on *:7778')
-// });
 
 app.use(bodyParser.json())
 
 var Storage = multer.diskStorage({
   destination: function(req, file, callback) {
-      callback(null, "pic_pro");
+      callback(null, "images");
   },
   filename: function(req, file, callback) {
-      callback(null, req.body.pic_name+ '.jpg');
+      callback(null, req.body.picName+ '.jpg');
   }
 });
 var upload = multer({
   storage: Storage
-}).fields([{ name: 'pic_pro', maxCount: 1 }])
+}).fields([{ name: 'photo', maxCount: 1 }])
+app.post("/uploadPic",function(req,res){
+  upload(req, res, function(err) {
+    console.log("upload")
+    res.end("Upload Success");
+    if (err) {
+      console.log(err)
+        return res.end("Something went wrong!");
+    }
+  })
+})
+app.post("/insertCat",function(req,res){
+  connection.query("select cat_name from category where cat_name = '"+req.body.catName+"'", function(err, rows, fields) {
+    if (!err){
+      console.log(rows)
+      if(rows.length == 0){
+        connection.query('insert into category (cat_name) values("'+req.body.catName+'")', function(err, result) {
+          if (!err){
+            if(result.affectedRows){
+              res.json({toppic:"category insert", status: true})
+            }
+          } else {
+            res.json({toppic:"category insert", status: false})
+          }
+        })
+      } else {
+        res.json({toppic:"category not insert", status: true})
+      }
+    } else {
+      res.json({status: "Fail getCat"})
+    }
+  });        
+})
 
 app.post("/insertPro",function(req,res){
+
+  function callback () { res.json({status: "Success insertPro"}) }
+
+  var itemsProcessed = 0;
   console.log(req.body)
-  connection.query('insert into product (pro_name,cat_id,pro_description,detail_id) values("'+req.body.name+'","'+req.body.cat+'","'+req.body.des+'")', function(err, result) {
+  connection.query('insert into product (pro_name,cat_id,pro_description,pro_pic) values("'+req.body.name+'","'+req.body.cat+'","'+req.body.des+'","'+req.body.namePic+'")', function(err, result) {
     if (!err){
       if(result.affectedRows){
         connection.query("SELECT AUTO_INCREMENT FROM  INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'nutcon_store' AND   TABLE_NAME   = 'product'", function(err, rows, fields) {
         if (!err){
           if(rows.length != 0){
-            console.log(rows)
-            // connection.query('insert into detail_product (det_color,det_size,det_price,det_quantity) values("'+req.body.pro_name+'")', function(err, result) {
-            //   if (!err){
-            //     if(result.affectedRows){
-            //       res.json({status: "Success insertPro"})
-            //     }
-            //   }
-            //   else {
-            //     res.json({status: "Fail insertPro  insert 2"})
-            //   }
-            // });        
+            let pro_id = rows[0].AUTO_INCREMENT-1
+            if(req.body.proDetail.txtNum != undefined){
+              req.body.proDetail.forEach(element => {
+                connection.query('insert into detail_product (det_color,det_size,det_price,det_quantity,pro_id) values("'+element.txtColor+'","'+element.txtSize+'","'+element.txtPrice+'","'+element.txtNum+'","'+pro_id+'")', function(err, result) {
+                  if (!err){
+                    if(result.affectedRows){
+                      itemsProcessed++;
+                      if(itemsProcessed === req.body.proDetail.length) {
+                        callback();
+                      }
+                    }
+                  }
+                  else {
+                    console.log(err)
+                  }
+                }); 
+              });
+            } else {
+              callback();
+            }      
           }
         } else {
           res.json({status: "Fail insertPro  select 1"})
