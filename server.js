@@ -67,21 +67,29 @@ app.post("/uploadPic",function(req,res){
   })
 })
 app.post("/insertCat",function(req,res){
-  connection.query("select cat_name from category where cat_name = '"+req.body.catName+"'", function(err, rows, fields) {
+  connection.query("select cat_name,cat_id from category where cat_name = '"+req.body.catName+"'", function(err, rows, fields) {
     if (!err){
       console.log(rows)
       if(rows.length == 0){
-        connection.query('insert into category (cat_name) values("'+req.body.catName+'")', function(err, result) {
+        connection.query("SELECT AUTO_INCREMENT FROM  INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'nutcon_store' AND   TABLE_NAME   = 'category'", function(err, rows, fields) {
           if (!err){
-            if(result.affectedRows){
-              res.json({toppic:"category insert", status: true})
+            if(rows.length != 0){
+              let cat_id = rows[0].AUTO_INCREMENT
+              connection.query('insert into category (cat_name) values("'+req.body.catName+'")', function(err, result) {
+                if (!err){
+                  if(result.affectedRows){
+                    res.json({toppic:"category insert", status: true, cat_id:cat_id})
+                  }
+                } else {
+                  res.json({toppic:"category insert", status: false})
+                }
+              })      
             }
-          } else {
-            res.json({toppic:"category insert", status: false})
           }
         })
       } else {
-        res.json({toppic:"category not insert", status: true})
+        console.log(rows[0].cat_id)
+        res.json({toppic:"category not insert", status: true, catId: rows[0].cat_id})
       }
     } else {
       res.json({status: "Fail getCat"})
@@ -109,7 +117,7 @@ app.post("/insertPro",function(req,res){
                     if(result.affectedRows){
                       itemsProcessed++;
                       if(itemsProcessed === req.body.proDetail.length) {
-                        callback();
+                        callback()
                       }
                     }
                   }
@@ -119,7 +127,7 @@ app.post("/insertPro",function(req,res){
                 }); 
               });
             } else {
-              callback();
+              callback()
             }      
           }
         } else {
@@ -129,6 +137,7 @@ app.post("/insertPro",function(req,res){
     }
   } else {
       res.json({status: "Fail insertPro insert 1"})
+      console.log("Fail insertPro insert 1")
     }
   });  
 });
